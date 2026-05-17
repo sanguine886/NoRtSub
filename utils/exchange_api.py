@@ -13,6 +13,7 @@ from .config import ts, get as cfg_get
 
 # 候选域名列表，按优先级排列
 API_HOSTS = [
+    "https://plus5.yhmoai.online",
     "https://plus3.yhmoai.online",
     "https://plus2.yhmoai.online",
     "https://plus.yhmoai.online",
