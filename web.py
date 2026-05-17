@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import Flask, render_template, request, jsonify, Response
 from curl_cffi import requests as cffi_requests
@@ -205,26 +206,21 @@ def run_batch_task(task_id, key_pairs):
         results = []
         all_session = []
 
-        for idx, (key, api_host) in enumerate(key_pairs, 1):
-            _log("INFO", f"━━━ [{idx}/{total}] 拿出 Key: {key[:8]}... ━━━")
+        max_workers = 10 if total > 10 else total
 
-            # 如果从 URL 中提取到了 API 地址，设置它
+        def _process_one(idx, key, api_host):
+            """处理单个 Key（线程安全）"""
             if api_host:
                 import utils.exchange_api as eapi
                 eapi._working_host = api_host
-                _log("INFO", f"API 地址: {api_host}")
 
             info = get_account_info(key)
             if not info:
-                _log("ERROR", f"[{idx}/{total}] 这个 Key 不认识，查无此人")
-                results.append({"key": key, "success": False, "error": "获取账号信息失败"})
-                continue
+                return idx, {"key": key, "success": False, "error": "获取账号信息失败"}, None
 
             email = info.get("accountEmail", "")
             if not email:
-                _log("ERROR", f"[{idx}/{total}] Key 有问题是空号，没邮箱")
-                results.append({"key": key, "success": False, "error": "未获取到邮箱"})
-                continue
+                return idx, {"key": key, "success": False, "error": "未获取到邮箱"}, None
 
             session = cffi_requests.Session(proxies=proxies, impersonate="chrome110")
             session.headers["Connection"] = "close"
@@ -236,25 +232,88 @@ def run_batch_task(task_id, key_pairs):
                 session.close()
 
             if not session_data:
-                results.append({"key": key, "success": False, "email": email, "error": "登录失败"})
-                _log("ERROR", f"[{idx}/{total}] {_mask(email)} 翻车了，跳过")
-                continue
+                return idx, {"key": key, "success": False, "email": email, "error": "登录失败"}, None
 
             filepath = save_session_to_file(email, session_data, output_dir)
             sub2_path = convert_and_save_sub2(session_data, email, output_dir)
             user = session_data.get("user", {})
-            results.append({
+            result = {
                 "key": key, "success": True, "email": email,
                 "user_name": user.get("name", ""),
                 "session_file": filepath, "sub2_file": sub2_path,
                 "expires": session_data.get("expires", ""),
-            })
-            all_session.append(session_data)
-            _log("SUCCESS", f"[{idx}/{total}] {_mask(email)} 到手！{user.get('name', '')} 的地盘归我了")
+            }
+            return idx, result, session_data
 
-            if idx < total:
-                _log("INFO", "喝口水，3 秒后继续...")
-                time.sleep(3)
+        if max_workers > 1:
+            _log("INFO", f"并发模式启动: {max_workers} 线程同时处理")
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(_process_one, idx, key, api_host): idx
+                    for idx, (key, api_host) in enumerate(key_pairs)
+                }
+                for future in as_completed(futures):
+                    idx, result, session_data = future.result()
+                    results.append((idx, result))
+                    if result["success"]:
+                        all_session.append(session_data)
+                        _log("SUCCESS", f"[{idx+1}/{total}] {_mask(result['email'])} 到手！{result.get('user_name', '')}")
+                    else:
+                        _log("ERROR", f"[{idx+1}/{total}] {result.get('error', '未知错误')}")
+
+            results.sort(key=lambda x: x[0])
+            results = [r for _, r in results]
+        else:
+            for idx, (key, api_host) in enumerate(key_pairs, 1):
+                _log("INFO", f"━━━ [{idx}/{total}] 拿出 Key: {key[:8]}... ━━━")
+
+                if api_host:
+                    import utils.exchange_api as eapi
+                    eapi._working_host = api_host
+                    _log("INFO", f"API 地址: {api_host}")
+
+                info = get_account_info(key)
+                if not info:
+                    _log("ERROR", f"[{idx}/{total}] 这个 Key 不认识，查无此人")
+                    results.append({"key": key, "success": False, "error": "获取账号信息失败"})
+                    continue
+
+                email = info.get("accountEmail", "")
+                if not email:
+                    _log("ERROR", f"[{idx}/{total}] Key 有问题是空号，没邮箱")
+                    results.append({"key": key, "success": False, "error": "未获取到邮箱"})
+                    continue
+
+                session = cffi_requests.Session(proxies=proxies, impersonate="chrome110")
+                session.headers["Connection"] = "close"
+                session.timeout = 30
+
+                try:
+                    session_data = _do_login(session, email, proxy, proxies, _log)
+                finally:
+                    session.close()
+
+                if not session_data:
+                    results.append({"key": key, "success": False, "email": email, "error": "登录失败"})
+                    _log("ERROR", f"[{idx}/{total}] {_mask(email)} 翻车了，跳过")
+                    continue
+
+                filepath = save_session_to_file(email, session_data, output_dir)
+                sub2_path = convert_and_save_sub2(session_data, email, output_dir)
+                user = session_data.get("user", {})
+                results.append({
+                    "key": key, "success": True, "email": email,
+                    "user_name": user.get("name", ""),
+                    "session_file": filepath, "sub2_file": sub2_path,
+                    "expires": session_data.get("expires", ""),
+                })
+                all_session.append(session_data)
+                _log("SUCCESS", f"[{idx}/{total}] {_mask(email)} 到手！{user.get('name', '')} 的地盘归我了")
+
+                if idx < total:
+                    _log("INFO", "喝口水，3 秒后继续...")
+                    time.sleep(3)
 
         combined = None
         if len(all_session) > 1:

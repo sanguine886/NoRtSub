@@ -4,6 +4,8 @@ import os
 import re
 import sys
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from curl_cffi import requests
 
@@ -106,7 +108,23 @@ def do_login(email, proxy):
         s.close()
 
 
-def process_key(key, proxy, output_dir):
+def _parse_key_input(raw):
+    """解析输入，支持完整URL和纯Key两种格式，返回 (key, api_host) 元组列表"""
+    lines = [l.strip() for l in re.split(r"[,;\n]+", raw) if l.strip()]
+    result = []
+    for line in lines:
+        m = re.match(r'https?://(plus\d+\.yhmoai\.online)/.*[?&]key=([A-Z0-9-]+)', line)
+        if m:
+            result.append((m.group(2), f"https://{m.group(1)}"))
+        else:
+            result.append((line, None))
+    return result
+
+
+def process_key(key, proxy, output_dir, api_host=None):
+    if api_host:
+        import utils.exchange_api as eapi
+        eapi._working_host = api_host
     info = get_account_info(key)
     if not info:
         return {"key": key, "success": False, "error": "获取账号信息失败"}
@@ -135,41 +153,77 @@ def main():
     proxy = cfg.get("proxy", "")
     output_dir = cfg.get("output_dir", "data/sessions")
 
-    keys = []
+    raw_lines = []
     k = cfg.get("keys", [])
     if isinstance(k, list) and k:
-        keys = [str(x).strip() for x in k if str(x).strip()]
+        raw_lines.extend(str(x).strip() for x in k if str(x).strip())
     elif cfg.get("key", ""):
-        keys = [cfg.get("key", "")]
+        raw_lines.append(cfg.get("key", ""))
 
     for arg in sys.argv[1:]:
         if arg.startswith("--keys-file="):
             fp = arg.split("=", 1)[1]
             if os.path.exists(fp):
                 with open(fp, "r", encoding="utf-8") as f:
-                    keys.extend(l.strip() for l in f if l.strip() and not l.startswith("#"))
+                    raw_lines.extend(l.strip() for l in f if l.strip() and not l.startswith("#"))
 
-    if not keys:
-        raw = input("Key: ").strip()
+    if not raw_lines:
+        raw = input("Key/URL: ").strip()
         if not raw:
             return
-        keys = [k.strip() for k in re.split(r"[,;\n]+", raw) if k.strip()]
+        raw_lines = raw.splitlines()
 
-    total = len(keys)
+    key_pairs = _parse_key_input("\n".join(raw_lines))
+    total = len(key_pairs)
     results = []
     all_session = []
 
-    for idx, key in enumerate(keys, 1):
-        print(f"[{cfg.ts()}] [{idx}/{total}] {key[:8]}...")
-        result = process_key(key, proxy, output_dir)
-        results.append(result)
-        if result["success"]:
-            all_session.append(result.pop("session_data"))
-            print(f"[{cfg.ts()}] [{idx}/{total}] OK - {result['email']}")
-        else:
-            print(f"[{cfg.ts()}] [{idx}/{total}] FAIL - {result['error']}")
-        if idx < total:
-            time.sleep(3)
+    max_workers = 10 if total > 10 else total
+
+    if max_workers > 1:
+        print(f"[{cfg.ts()}] 并发模式: {max_workers} 线程处理 {total} 个 Key")
+        sem = threading.Semaphore(max_workers)
+        done_count = [0]
+        count_lock = threading.Lock()
+
+        def _worker(key, api_host, idx):
+            sem.acquire()
+            try:
+                r = process_key(key, proxy, output_dir, api_host=api_host)
+                with count_lock:
+                    done_count[0] += 1
+                    cur = done_count[0]
+                tag = "OK" if r["success"] else "FAIL"
+                info = r.get("email", r.get("error", ""))
+                print(f"[{cfg.ts()}] [{cur}/{total}] {tag} - {info}")
+                return idx, r
+            finally:
+                sem.release()
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_worker, key, api_host, i): i
+                for i, (key, api_host) in enumerate(key_pairs)
+            }
+            for future in as_completed(futures):
+                idx, result = future.result()
+                results.append((idx, result))
+
+        results.sort(key=lambda x: x[0])
+        results = [r for _, r in results]
+    else:
+        for idx, (key, api_host) in enumerate(key_pairs, 1):
+            print(f"[{cfg.ts()}] [{idx}/{total}] {key[:8]}...")
+            result = process_key(key, proxy, output_dir, api_host=api_host)
+            results.append(result)
+            if result["success"]:
+                print(f"[{cfg.ts()}] [{idx}/{total}] OK - {result['email']}")
+            else:
+                print(f"[{cfg.ts()}] [{idx}/{total}] FAIL - {result['error']}")
+
+    for r in results:
+        if r["success"]:
+            all_session.append(r.pop("session_data"))
 
     if len(all_session) > 1:
         p = convert_and_save_combined_sub2(all_session, output_dir)

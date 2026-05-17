@@ -1,7 +1,6 @@
 # NoRtSub
 
 通过邮箱验证码无密码登录 ChatGPT，获取 Session 并转换为 sub2api 格式。
-参考https://github.com/yynxxxxx/GPTSession2CPAandSub2API
 
 ## 快速开始
 
@@ -37,8 +36,6 @@ output_dir: "data/sessions"        # 输出目录
 ```
 
 ## auth_core
-
-引用项目 https://github.com/wenfxl/openai-cpa
 
 `utils/auth_core.*` 提供设备指纹和 sentinel token 生成，是登录 OpenAI 的必需模块。
 
