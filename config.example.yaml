@@ -1,0 +1,8 @@
+# 代理地址（必须，OpenAI 需要非 CN/HK IP）
+proxy: "http://127.0.0.1:7890"
+
+# 输出目录
+output_dir: "data/sessions"
+
+# Exchange API 地址（可选，默认自动回退）
+# exchange_api_url: "https://plus3.yhmoai.online"

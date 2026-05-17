@@ -1,0 +1,4 @@
+curl-cffi>=0.5.10
+PyYAML>=6.0
+Flask>=3.0
+requests>=2.28
