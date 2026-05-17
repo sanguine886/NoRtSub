@@ -1,6 +1,9 @@
 # NoRtSub
 
 通过邮箱验证码无密码登录 ChatGPT，获取 Session 并转换为 sub2api 格式。
+引用
+  https://github.com/wenfxl/openai-cpa
+  https://github.com/yynxxxxx/GPTSession2CPAandSub2API
 
 ## 快速开始
 
