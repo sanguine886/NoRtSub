@@ -1,1 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoRtSub - ChatGPT Session 获取工具</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --surface2: #1a1a26;
+            --border: #2a2a3a;
+            --text: #e0e0e8;
+            --text2: #8888a0;
+            --accent: #6c5ce7;
+            --accent2: #a29bfe;
+            --green: #00b894;
+            --red: #e17055;
+            --yellow: #fdcb6e;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 720px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent2), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: var(--text2);
+            font-size: 14px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text);
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            border-color: var(--accent);
+        }
+
+        .form-group input::placeholder {
+            color: #555;
+        }
+
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            outline: none;
+            transition: border-color 0.2s;
+            resize: vertical;
+            min-height: 100px;
+            white-space: pre;
+            overflow-wrap: normal;
+            overflow-x: auto;
+            line-height: 1.6;
+            tab-size: 4;
+        }
+
+        .form-group textarea:focus {
+            border-color: var(--accent);
+        }
+
+        .form-group textarea::placeholder {
+            color: #555;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-row .form-group { flex: 1; }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--accent), #5b4bd5);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(108, 92, 231, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn.running {
+            background: linear-gradient(135deg, #2d3436, #636e72);
+        }
+
+        .log-area {
+            background: #08080e;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            min-height: 280px;
+            max-height: 480px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .log-area::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .log-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .log-area::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        .log-line {
+            display: flex;
+            gap: 10px;
+            padding: 1px 0;
+        }
+
+        .log-time {
+            color: #555;
+            flex-shrink: 0;
+        }
+
+        .log-level {
+            flex-shrink: 0;
+            width: 65px;
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .log-level.INFO { color: var(--accent2); }
+        .log-level.SUCCESS { color: var(--green); }
+        .log-level.ERROR { color: var(--red); }
+        .log-level.WARNING { color: var(--yellow); }
+
+        .log-msg { color: var(--text); word-break: break-all; }
+
+        .result-area {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .result-area.show { display: block; }
+
+        .result-card {
+            background: var(--surface2);
+            border: 1px solid var(--green);
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .result-card.error {
+            border-color: var(--red);
+        }
+
+        .result-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .result-title .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+        }
+
+        .result-card.error .result-title .dot {
+            background: var(--red);
+        }
+
+        .result-info {
+            font-size: 13px;
+            color: var(--text2);
+            line-height: 1.8;
+        }
+
+        .result-info span {
+            color: var(--text);
+            font-family: 'Consolas', monospace;
+        }
+
+        .download-links {
+            margin-top: 16px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .download-btn {
+            padding: 8px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--accent2);
+            font-size: 13px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .download-btn:hover {
+            border-color: var(--accent);
+            background: var(--surface2);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .empty-log {
+            color: #444;
+            text-align: center;
+            padding: 40px 0;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 20px 12px; }
+            .card { padding: 20px; }
+            .form-row { flex-direction: column; gap: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>NoRtSub</h1>
+            <p>ChatGPT Session 获取 & sub2api 转换工具</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">卡密地址</div>
+            <div class="form-group">
+                <label>粘贴卡密链接（支持批量，每行一个）</label>
+                <textarea id="key" placeholder="https://plus2.yhmoai.online/?key=XXXX-XXXX-XXXX-XXXX&#10;https://plus3.yhmoai.online/?key=YYYY-YYYY-YYYY-YYYY" rows="5">{{ default_key }}</textarea>
+            </div>
+            <button class="btn" id="startBtn" onclick="startTask()">
+                开始执行
+            </button>
+        </div>
+
+        <div class="card">
+            <div class="card-title">执行日志</div>
+            <div class="log-area" id="logArea">
+                <div class="empty-log" id="emptyLog">等待执行...</div>
+            </div>
+        </div>
+
+        <div class="result-area" id="resultArea">
+            <div class="card" id="resultCard">
+                <div class="result-title">
+                    <span class="dot"></span>
+                    <span id="resultTitle">执行完成</span>
+                </div>
+                <div class="result-info" id="resultInfo"></div>
+                <div class="download-links" id="downloadLinks"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSSE = null;
+
+        function startTask() {
+            const keys = document.getElementById('key').value.trim();
+
+            if (!keys) {
+                alert('请输入卡密地址');
+                return;
+            }
+
+            const btn = document.getElementById('startBtn');
+            btn.disabled = true;
+            btn.classList.add('running');
+            btn.innerHTML = '<span class="spinner"></span>执行中...';
+
+            // 清空日志
+            document.getElementById('logArea').innerHTML = '';
+            document.getElementById('resultArea').classList.remove('show');
+
+            // 关闭旧连接
+            if (currentSSE) currentSSE.close();
+
+            fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keys }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    addLog('ERROR', data.error);
+                    resetBtn();
+                    return;
+                }
+                streamLogs(data.task_id);
+            })
+            .catch(err => {
+                addLog('ERROR', '请求失败: ' + err.message);
+                resetBtn();
+            });
+        }
+
+        function streamLogs(taskId) {
+            currentSSE = new EventSource('/api/logs/' + taskId);
+
+            currentSSE.onmessage = function(e) {
+                try {
+                    const entry = JSON.parse(e.data);
+                    if (entry._done) {
+                        showResult(entry.result);
+                        currentSSE.close();
+                        resetBtn();
+                        return;
+                    }
+                    addLog(entry.level, entry.msg);
+                } catch {}
+            };
+
+            currentSSE.onerror = function() {
+                currentSSE.close();
+                resetBtn();
+            };
+        }
+
+        function addLog(level, msg) {
+            const area = document.getElementById('logArea');
+            const empty = document.getElementById('emptyLog');
+            if (empty) empty.remove();
+
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            line.innerHTML = `
+                <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                <span class="log-level ${level}">${level}</span>
+                <span class="log-msg">${escapeHtml(msg)}</span>
+            `;
+            area.appendChild(line);
+            area.scrollTop = area.scrollHeight;
+        }
+
+        function showResult(result) {
+            const area = document.getElementById('resultArea');
+            const card = document.getElementById('resultCard');
+            const title = document.getElementById('resultTitle');
+            const info = document.getElementById('resultInfo');
+            const links = document.getElementById('downloadLinks');
+
+            area.classList.add('show');
+
+            if (!result || !result.success) {
+                card.classList.add('error');
+                title.textContent = '执行失败';
+                info.innerHTML = `错误: <span>${escapeHtml(result?.error || '未知错误')}</span>`;
+                links.innerHTML = '';
+                return;
+            }
+
+            card.classList.remove('error');
+            title.textContent = '批量执行完成';
+
+            // 批量结果摘要
+            let html = `
+                总计: <span>${result.total}</span> |
+                成功: <span style="color:var(--green)">${result.success_count}</span> |
+                失败: <span style="color:var(--red)">${result.fail_count}</span>
+            `;
+
+            // 每个 key 的结果表格
+            if (result.results && result.results.length > 0) {
+                html += `<div style="margin-top:12px;overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                        <tr style="border-bottom:1px solid var(--border);">
+                            <th style="text-align:left;padding:6px 8px;color:var(--text2);">#</th>
+                            <th style="text-align:left;padding:6px 8px;color:var(--text2);">邮箱</th>
+                            <th style="text-align:left;padding:6px 8px;color:var(--text2);">状态</th>
+                            <th style="text-align:left;padding:6px 8px;color:var(--text2);">下载</th>
+                        </tr>`;
+                result.results.forEach((r, i) => {
+                    const status = r.success
+                        ? '<span style="color:var(--green)">成功</span>'
+                        : `<span style="color:var(--red)">${escapeHtml(r.error || '失败')}</span>`;
+                    let dl = '';
+                    if (r.sub2_file) {
+                        const name = r.sub2_file.split(/[/\\]/).pop();
+                        dl = `<a class="download-btn" href="/api/download/${encodeURIComponent(name)}" style="padding:4px 10px;font-size:12px;">sub2</a>`;
+                    }
+                    html += `<tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:6px 8px;">${i + 1}</td>
+                        <td style="padding:6px 8px;font-family:monospace;">${escapeHtml(r.email || r.key?.substring(0, 8) + '...')}</td>
+                        <td style="padding:6px 8px;">${status}</td>
+                        <td style="padding:6px 8px;">${dl}</td>
+                    </tr>`;
+                });
+                html += '</table></div>';
+            }
+
+            info.innerHTML = html;
+
+            // 下载链接
+            let linksHtml = '';
+            if (result.combined_file) {
+                const name = result.combined_file.split(/[/\\]/).pop();
+                linksHtml += `<a class="download-btn" href="/api/download/${encodeURIComponent(name)}">下载合并 sub2api JSON</a>`;
+            }
+            // 单个成功的下载
+            if (result.results) {
+                result.results.forEach(r => {
+                    if (r.session_file) {
+                        const name = r.session_file.split(/[/\\]/).pop();
+                        linksHtml += `<a class="download-btn" href="/api/download/${encodeURIComponent(name)}">Session: ${escapeHtml(r.email?.split('@')[0] || 'file')}</a>`;
+                    }
+                });
+            }
+            links.innerHTML = linksHtml;
+        }
+
+        function resetBtn() {
+            const btn = document.getElementById('startBtn');
+            btn.disabled = false;
+            btn.classList.remove('running');
+            btn.innerHTML = '开始执行';
+        }
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text || '';
+            return d.innerHTML;
+        }
+    </script>
+</body>
+</html>
